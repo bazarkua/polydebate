@@ -41,29 +41,33 @@ class PolymarketService:
         if cached_result:
             return cached_result
 
-        # Check if this is trending/breaking (special categories)
-        is_trending_or_breaking = category and category.lower() in ['breaking', 'trending']
+        # Check if this is trending/breaking/new (special categories)
+        is_breaking = category and category.lower() == 'breaking'
+        is_trending = category and category.lower() == 'trending'
+        is_new = category and category.lower() == 'new'
 
-        # Use pagination endpoint for better filtering and sorting
+        # Base parameters for all categories
+        # All categories use: active=true, frequency=all (no closed filter), sort by 24hr volume
         params = {
             'limit': min(limit, 100),
             'offset': offset,
             'archived': 'false',
-            'order': 'volume24hr',  # Sort by 24h volume to match Polymarket's default ordering
+            'active': 'true',
             'ascending': 'false'
         }
 
-        # For trending/breaking, show ALL markets (active and closed) to get full picture
-        if is_trending_or_breaking:
-            # Don't set active or closed filters - show everything
-            pass
+        # Set sort order based on category
+        if is_new:
+            # New: sort by newest (ID descending)
+            params['order'] = 'id'
         else:
-            # For regular categories, only show active markets by default
-            params['active'] = 'true'
-            params['closed'] = 'true' if closed else 'false'
+            # All other categories: sort by 24hr volume
+            params['order'] = 'volume24hr'
+
+        # Don't set closed filter - show all frequencies (both open and closed markets) for all categories
 
         # Use tag_slug for category filtering (Polymarket's native approach)
-        if category and not is_trending_or_breaking:
+        if category and not is_breaking and not is_trending and not is_new:
             # Map our category names to Polymarket tag slugs
             category_slug_map = {
                 'politics': 'politics',
@@ -75,7 +79,13 @@ class PolymarketService:
                 'finance': 'finance',
                 'ai': 'ai',
                 'world': 'world',
-                'geopolitics': 'geopolitics'
+                'geopolitics': 'geopolitics',
+                'global-elections': 'global-elections',
+                'elections': 'global-elections',
+                'economy': 'economy',
+                'earnings': 'earnings',
+                'culture': 'pop-culture',
+                'pop-culture': 'pop-culture'
             }
 
             tag_slug = category_slug_map.get(category.lower())
@@ -87,9 +97,61 @@ class PolymarketService:
             params['tag_id'] = tag_id
 
         try:
-            # Use different endpoint for trending/breaking vs regular categories
-            if is_trending_or_breaking:
-                # For trending/breaking, use simple /events endpoint (includes all markets)
+            # Use different endpoints based on category
+            if is_breaking:
+                # Breaking uses biggest-movers API (markets with largest price changes)
+                response = self.session.get(
+                    'https://polymarket.com/api/biggest-movers',
+                    timeout=10
+                )
+                response.raise_for_status()
+                biggest_movers_data = response.json()
+
+                # Transform biggest-movers data directly (it already has market info)
+                markets = []
+                for market in biggest_movers_data.get('markets', [])[:limit]:
+                    transformed_market = {
+                        'id': market.get('id'),
+                        'question': market.get('question'),
+                        'description': '',
+                        'category': 'Breaking',
+                        'tag_id': None,
+                        'outcomes': [
+                            {
+                                'name': 'Yes',
+                                'slug': market.get('clobTokenIds', [''])[0] if market.get('clobTokenIds') else '',
+                                'price': float(market.get('outcomePrices', [0.5])[0]) if market.get('outcomePrices') else 0.5,
+                                'shares': '0'
+                            },
+                            {
+                                'name': 'No',
+                                'slug': market.get('clobTokenIds', ['', ''])[1] if len(market.get('clobTokenIds', [])) > 1 else '',
+                                'price': float(market.get('outcomePrices', [0.5, 0.5])[1]) if len(market.get('outcomePrices', [])) > 1 else 0.5,
+                                'shares': '0'
+                            }
+                        ],
+                        'volume': self._format_volume(market.get('events', [{}])[0].get('volume', 0) if market.get('events') else 0),
+                        'end_date': None,
+                        'created_date': None,
+                        'image_url': market.get('image', '')
+                    }
+                    markets.append(transformed_market)
+
+                # Return early for breaking
+                result = {
+                    'markets': markets,
+                    'total': len(markets),
+                    'offset': offset,
+                    'limit': limit,
+                    'has_more': False
+                }
+                cache.set(cache_key, result, ttl=config.CACHE_MARKETS_TTL)
+                return result
+
+            elif is_trending or is_new:
+                # Trending and New use simple /events endpoint
+                # Trending: sorted by 24h volume
+                # New: sorted by newest (ID descending)
                 response = self.session.get(
                     f'{self.base_url}/events',
                     params=params,
@@ -110,12 +172,6 @@ class PolymarketService:
 
             # Transform Polymarket response to our format
             markets = self._transform_markets(data)
-
-            # Special case: "breaking" and "trending" show all high-volume markets (no tag filter)
-            # These categories already come sorted by volume24hr from the API
-            if category and category.lower() in ['breaking', 'trending']:
-                # No filtering needed, API already sorted by volume
-                markets = markets[:limit]
 
             # Remove volume_raw from all markets (internal field only)
             for m in markets:
@@ -310,13 +366,16 @@ class PolymarketService:
             'politics': 'Politics',
             'sports': 'Sports',
             'science': 'Science',
-            'pop-culture': 'Pop Culture',
+            'pop-culture': 'Culture',
             'business': 'Business',
             'technology': 'Technology',
             'finance': 'Finance',
             'ai': 'AI',
             'world': 'World',
-            'geopolitics': 'Geopolitics'
+            'geopolitics': 'Geopolitics',
+            'global-elections': "Elections",
+            'economy': 'Economy',
+            'earnings': 'Earnings'
         }
 
         # First, check for priority categories (Breaking News)
