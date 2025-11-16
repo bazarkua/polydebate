@@ -49,7 +49,7 @@ class PolymarketService:
             'limit': fetch_limit,
             'offset': offset,
             'closed': 'true' if closed else 'false',
-            'order': 'id',
+            'order': 'volume',  # Sort by volume to match Polymarket's default ordering
             'ascending': 'false'
         }
 
