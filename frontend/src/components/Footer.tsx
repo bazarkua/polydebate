@@ -20,7 +20,10 @@ export function Footer() {
           {/* Copyright */}
           <p
             className="text-caption"
-            style={{ color: "var(--foreground-secondary)" }}
+            style={{ 
+              color: "var(--foreground-secondary)",
+              lineHeight: "var(--leading-base)",
+            }}
           >
             PolyDebate © 2025
           </p>
@@ -30,35 +33,50 @@ export function Footer() {
             <Link
               href="/privacy"
               className="text-caption transition-colors duration-150 hover:underline"
-              style={{ color: "var(--foreground-secondary)" }}
+              style={{ 
+                color: "var(--foreground-secondary)",
+                lineHeight: "var(--leading-base)",
+              }}
             >
               Privacy
             </Link>
             <Link
               href="/terms"
               className="text-caption transition-colors duration-150 hover:underline"
-              style={{ color: "var(--foreground-secondary)" }}
+              style={{ 
+                color: "var(--foreground-secondary)",
+                lineHeight: "var(--leading-base)",
+              }}
             >
               Terms of Use
             </Link>
             <Link
               href="/learn"
               className="text-caption transition-colors duration-150 hover:underline"
-              style={{ color: "var(--foreground-secondary)" }}
+              style={{ 
+                color: "var(--foreground-secondary)",
+                lineHeight: "var(--leading-base)",
+              }}
             >
               Learn
             </Link>
             <Link
               href="/careers"
               className="text-caption transition-colors duration-150 hover:underline"
-              style={{ color: "var(--foreground-secondary)" }}
+              style={{ 
+                color: "var(--foreground-secondary)",
+                lineHeight: "var(--leading-base)",
+              }}
             >
               Careers
             </Link>
             <Link
               href="/press"
               className="text-caption transition-colors duration-150 hover:underline"
-              style={{ color: "var(--foreground-secondary)" }}
+              style={{ 
+                color: "var(--foreground-secondary)",
+                lineHeight: "var(--leading-base)",
+              }}
             >
               Press
             </Link>

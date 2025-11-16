@@ -75,8 +75,11 @@ export function Navigation({
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <span 
-              className="text-h2 font-semibold"
-              style={{ color: "var(--nav-text)" }}
+              className="text-h2"
+              style={{ 
+                color: "var(--nav-text)",
+                lineHeight: "var(--leading-tight)",
+              }}
             >
               PolyDebate
             </span>
@@ -87,7 +90,7 @@ export function Navigation({
             <Button 
               variant="ghost" 
               size="sm" 
-              style={{ color: "var(--nav-text)" }}
+              style={{ color: "var(--nav-text)", border: "none" }}
               className="hover:bg-white/10"
             >
               How it works
@@ -203,6 +206,7 @@ export function Navigation({
                     )}
                     style={{
                       color: isActive ? "var(--nav-text)" : "rgba(255, 255, 255, 0.7)",
+                      lineHeight: "var(--leading-base)",
                     }}
                   >
                     {category}
@@ -229,10 +233,12 @@ export function Navigation({
                       color: "var(--color-white)",
                       borderColor: "var(--color-primary)",
                       boxShadow: "var(--shadow-primary)",
+                      lineHeight: "var(--leading-base)",
                     } : {
                       backgroundColor: "rgba(255, 255, 255, 0.1)",
                       color: "rgba(255, 255, 255, 0.8)",
                       borderColor: "rgba(255, 255, 255, 0.2)",
+                      lineHeight: "var(--leading-base)",
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {

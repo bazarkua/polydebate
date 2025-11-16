@@ -5,9 +5,51 @@ import { MarketCard } from "@/components/MarketCard";
 import { Footer } from "@/components/Footer";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { cn } from "@/lib/utils";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { apiClient, type Market } from "@/lib/api";
 
-// Mock data - will be replaced with API calls
+// Transform API market to component format
+const transformMarket = (market: Market) => {
+  // Determine period based on end_date (if available)
+  let period: "daily" | "monthly" = "daily";
+  if (market.end_date) {
+    const endDate = new Date(market.end_date);
+    const now = new Date();
+    const daysUntilEnd = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    period = daysUntilEnd > 30 ? "monthly" : "daily";
+  }
+
+  // Determine if market is live (ending soon or high volume)
+  const isLive = market.end_date 
+    ? new Date(market.end_date).getTime() - Date.now() < 24 * 60 * 60 * 1000 // Less than 24 hours
+    : false;
+
+  return {
+    id: market.id,
+    question: market.question,
+    description: market.description,
+    category: market.category,
+    tag_id: market.tag_id,
+    market_type: market.market_type,
+    outcomes: market.outcomes.map(outcome => ({
+      name: outcome.name,
+      slug: outcome.slug,
+      price: outcome.price,
+      shares: outcome.shares,
+    })),
+    volume: market.volume,
+    volume_24h: market.volume_24h,
+    liquidity: market.liquidity,
+    end_date: market.end_date,
+    created_date: market.created_date,
+    image_url: market.image_url,
+    resolution_source: market.resolution_source,
+    period,
+    isLive,
+  };
+};
+
+// Legacy mock data - kept for reference but not used
 const mockMarkets = [
   {
     id: "bitcoin-100k-2025",
@@ -215,22 +257,61 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState("trending");
   const [activeSubtopic, setActiveSubtopic] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [allMarkets, setAllMarkets] = useState<Market[]>([]); // All loaded markets
   const [displayCount, setDisplayCount] = useState(CARDS_PER_PAGE);
   const [showFooter, setShowFooter] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
   const [newCardIds, setNewCardIds] = useState<Set<string>>(new Set());
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Filter markets based on category, subtopic, and search
-  const filteredMarkets = useMemo(() => {
-    let filtered = mockMarkets;
+  // Fetch markets from API
+  useEffect(() => {
+    const fetchMarkets = async () => {
+      setIsInitialLoading(true);
+      setError(null);
+      setOffset(0);
+      setAllMarkets([]);
 
-    // Filter by category
-    if (activeCategory !== "trending" && activeCategory !== "breaking" && activeCategory !== "new") {
-      filtered = filtered.filter((market) => 
-        market.category.toLowerCase() === activeCategory
-      );
-    }
+             try {
+               // All categories are now passed to API (breaking/trending/new use path endpoints)
+               const response = await apiClient.getMarkets({
+                 limit: 100, // Fetch more initially
+                 offset: 0,
+                 category: activeCategory,
+                 closed: false,
+               });
+
+        setAllMarkets(response.markets);
+        setHasMore(response.has_more);
+        setOffset(response.markets.length);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load markets';
+        setError(errorMessage);
+        console.error('Error fetching markets:', err);
+        
+        // Log helpful debugging info
+        if (errorMessage.includes('Cannot connect to backend')) {
+          console.error('Backend connection issue. Please ensure:');
+          console.error('1. Backend server is running: cd backend && python app.py');
+          console.error('2. Backend is accessible at:', process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000');
+        }
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+
+    fetchMarkets();
+  }, [activeCategory]); // Refetch when category changes
+
+         // Filter markets based on subtopic and search (category filtering is done server-side)
+         const filteredMarkets = useMemo(() => {
+           let filtered = allMarkets.map(transformMarket);
+
+           // Category filtering is now done server-side via API, so we only filter by subtopic and search
 
     // Filter by subtopic (if not "All")
     if (activeSubtopic !== "All") {
@@ -250,15 +331,8 @@ export default function Home() {
       );
     }
 
-    // Always generate enough markets for infinite scroll (at least 3 pages worth)
-    const minMarketsNeeded = CARDS_PER_PAGE * 3;
-    if (filtered.length < minMarketsNeeded) {
-      const moreMarkets = generateMoreMarkets(mockMarkets, minMarketsNeeded - filtered.length, filtered.length);
-      filtered = [...filtered, ...moreMarkets] as typeof mockMarkets;
-    }
-
     return filtered;
-  }, [activeCategory, activeSubtopic, searchQuery]);
+  }, [allMarkets, activeCategory, activeSubtopic, searchQuery]);
 
   // Reset display count when filters change
   useEffect(() => {
@@ -268,37 +342,58 @@ export default function Home() {
 
   // Calculate displayed markets
   const displayedMarkets = filteredMarkets.slice(0, displayCount);
-  const hasMoreMarkets = displayCount < filteredMarkets.length;
+  const hasMoreMarkets = displayCount < filteredMarkets.length || (hasMore && !isInitialLoading);
+
+         // Load more markets when scrolling
+         const loadMoreMarkets = useCallback(async () => {
+           if (isLoading || !hasMore) return;
+
+           setIsLoading(true);
+           try {
+             // All categories are now passed to API (breaking/trending/new use path endpoints)
+             const response = await apiClient.getMarkets({
+               limit: CARDS_PER_PAGE,
+               offset: offset,
+               category: activeCategory,
+               closed: false,
+             });
+
+      if (response.markets.length > 0) {
+        setAllMarkets((prev) => [...prev, ...response.markets]);
+        setOffset((prev) => prev + response.markets.length);
+        setHasMore(response.has_more);
+
+        // Mark new cards for animation
+        const newIds = new Set<string>();
+        response.markets.forEach((market) => {
+          newIds.add(market.id);
+        });
+        setNewCardIds(newIds);
+        setTimeout(() => {
+          setNewCardIds(new Set());
+        }, 500);
+
+        setDisplayCount((prev) => prev + CARDS_PER_PAGE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error('Error loading more markets:', err);
+      setHasMore(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isLoading, hasMore, offset, activeCategory]);
 
   // Infinite scroll observer
   useEffect(() => {
     const currentTarget = observerTarget.current;
-    if (!currentTarget || !hasMoreMarkets) return;
+    if (!currentTarget) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !isLoading && hasMoreMarkets) {
-          setIsLoading(true);
-          // Simulate loading delay
-          setTimeout(() => {
-            const previousCount = displayCount;
-            setDisplayCount((prev) => {
-              const newCount = prev + CARDS_PER_PAGE;
-              // Mark new cards for animation
-              const newIds = new Set<string>();
-              const newMarkets = filteredMarkets.slice(previousCount, newCount);
-              newMarkets.forEach((market) => {
-                newIds.add(market.id);
-              });
-              setNewCardIds(newIds);
-              // Clear animation class after animation completes
-              setTimeout(() => {
-                setNewCardIds(new Set());
-              }, 500);
-              return newCount;
-            });
-            setIsLoading(false);
-          }, 800);
+        if (entries[0].isIntersecting && !isLoading && hasMore && !isInitialLoading) {
+          loadMoreMarkets();
         }
       },
       { threshold: 0.1, rootMargin: "100px" }
@@ -309,7 +404,7 @@ export default function Home() {
     return () => {
       observer.disconnect();
     };
-  }, [isLoading, hasMoreMarkets, displayCount, filteredMarkets]);
+  }, [isLoading, hasMore, isInitialLoading, offset, loadMoreMarkets]);
 
   // Scroll detection for footer
   useEffect(() => {
@@ -341,8 +436,47 @@ export default function Home() {
 
       <main className="container mx-auto px-4 py-6 pb-24">
 
+        {/* Error State */}
+        {error && (
+          <div className="text-center py-12">
+            <p 
+              className="text-body"
+              style={{ 
+                color: "var(--color-red)",
+                lineHeight: "var(--leading-base)",
+                marginBottom: "calc(var(--leading-base) * 1em)",
+              }}
+            >
+              {error}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded text-white"
+              style={{ backgroundColor: "var(--color-primary)" }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Initial Loading State */}
+        {isInitialLoading && !error && (
+          <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <LoadingSpinner size="lg" />
+            <div 
+              className="text-body" 
+              style={{ 
+                color: "var(--foreground-secondary)",
+                lineHeight: "var(--leading-base)",
+              }}
+            >
+              Loading markets...
+            </div>
+          </div>
+        )}
+
         {/* Markets Grid */}
-        {displayedMarkets.length > 0 ? (
+        {!isInitialLoading && !error && displayedMarkets.length > 0 ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
               {displayedMarkets.map((market) => (
@@ -366,7 +500,10 @@ export default function Home() {
                     <LoadingSpinner size="md" />
                     <div 
                       className="text-caption" 
-                      style={{ color: "var(--foreground-secondary)" }}
+                      style={{ 
+                        color: "var(--foreground-secondary)",
+                        lineHeight: "var(--leading-base)",
+                      }}
                     >
                       Loading more markets...
                     </div>
@@ -379,7 +516,10 @@ export default function Home() {
           <div className="text-center py-12">
             <p 
               className="text-body"
-              style={{ color: "var(--foreground-secondary)" }}
+              style={{ 
+                color: "var(--foreground-secondary)",
+                lineHeight: "var(--leading-base)",
+              }}
             >
               No markets found. Try adjusting your filters.
             </p>

@@ -1,0 +1,380 @@
+// API client for PolyDebate backend
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+
+// Market Types
+export interface MarketOutcome {
+  name: string;
+  slug?: string;
+  price: number;
+  shares?: string;
+}
+
+export interface Market {
+  id: string;
+  question: string;
+  description?: string;
+  category: string;
+  tag_id?: string;
+  market_type?: 'binary' | 'categorical';
+  outcomes: MarketOutcome[];
+  volume: string;
+  volume_24h?: string;
+  liquidity?: string;
+  end_date?: string;
+  created_date?: string;
+  image_url?: string;
+  resolution_source?: string;
+}
+
+export interface MarketsResponse {
+  markets: Market[];
+  total: number;
+  offset: number;
+  limit: number;
+  has_more: boolean;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug?: string;
+  market_count?: number;
+  icon_url?: string;
+}
+
+export interface CategoriesResponse {
+  categories: Category[];
+}
+
+// Model Types
+export interface ModelPricing {
+  input: number;
+  output: number;
+  total_per_million: number;
+}
+
+export interface Model {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  pricing: ModelPricing;
+  is_free: boolean;
+  context_length: number;
+  max_output_tokens: number;
+  supported: boolean;
+}
+
+export interface ModelsResponse {
+  models: Model[];
+  total_count: number;
+  free_count: number;
+  paid_count: number;
+}
+
+// Debate Types
+export interface DebateStartRequest {
+  market_id: string;
+  model_ids: string[];
+  rounds: number;
+}
+
+export interface DebateModel {
+  model_id: string;
+  model_name: string;
+  provider?: string;
+}
+
+export interface DebateStartResponse {
+  debate_id: string;
+  status: 'initialized' | 'in_progress' | 'paused' | 'completed' | 'stopped';
+  market: {
+    id: string;
+    question: string;
+    outcomes: Array<{ name: string; price: number }>;
+  };
+  models: DebateModel[];
+  rounds: number;
+  total_messages_expected: number;
+  created_at: string;
+  stream_url: string;
+}
+
+export interface DebateStatus {
+  debate_id: string;
+  status: 'initialized' | 'in_progress' | 'paused' | 'completed' | 'stopped';
+  market: {
+    id: string;
+    question: string;
+    outcomes: Array<{ name: string; price: number }>;
+  };
+  models: DebateModel[];
+  rounds: number;
+  current_round?: number;
+  messages_count?: number;
+  created_at: string;
+  paused?: boolean;
+}
+
+export interface DebateMessage {
+  message_id: string;
+  round: number;
+  model_id: string;
+  model_name: string;
+  message_type: 'initial' | 'rebuttal' | 'final';
+  text: string;
+  predictions: Record<string, number>; // outcome name -> percentage (0-100)
+  audio_url?: string;
+  audio_duration?: number;
+  timestamp: string;
+}
+
+export interface DebateResults {
+  debate_id: string;
+  status: 'completed';
+  market: {
+    id: string;
+    question: string;
+    outcomes: Array<{ name: string; price: number }>;
+  };
+  summary: {
+    overall: string;
+    agreements: string[];
+    disagreements: Array<{
+      topic: string;
+      positions: Record<string, string>; // model_name -> position
+    }>;
+    consensus: string;
+    model_rationales: Array<{
+      model: string;
+      final_prediction: Record<string, number>; // outcome -> percentage (0-100)
+      rationale: string;
+      key_arguments: string[];
+    }>;
+  };
+  final_predictions: Record<string, {
+    predictions: Record<string, number>; // outcome -> percentage (0-100)
+    initial_predictions: Record<string, number>;
+    change: string;
+  }>;
+  statistics: {
+    average_prediction: Record<string, number>;
+    median_prediction: Record<string, number>;
+    prediction_variance: number;
+    polymarket_odds: Record<string, number>;
+    ai_vs_market_delta: string;
+    total_messages: number;
+    total_duration_seconds: number;
+    models_count: number;
+    rounds_completed: number;
+  };
+  completed_at: string;
+}
+
+export interface DebateListItem {
+  debate_id: string;
+  market_id: string;
+  market_question: string;
+  status: 'completed' | 'in_progress' | 'paused' | 'stopped';
+  models_count: number;
+  rounds: number;
+  models: DebateModel[];
+  average_prediction?: Record<string, number>;
+  created_at: string;
+  completed_at?: string;
+  duration_seconds?: number;
+}
+
+export interface DebatesResponse {
+  debates: DebateListItem[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+class ApiClient {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = API_BASE_URL) {
+    this.baseUrl = baseUrl;
+  }
+
+  private async fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options?.headers,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+        throw new Error(error.error?.message || `HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error(`Cannot connect to backend API at ${this.baseUrl}. Make sure the backend server is running on port 5000.`);
+      }
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Network error occurred');
+    }
+  }
+
+  async getMarkets(params?: {
+    limit?: number;
+    offset?: number;
+    category?: string;
+    tag_id?: string;
+    closed?: boolean;
+  }): Promise<MarketsResponse> {
+    // Special categories use path-based endpoints: breaking, trending, new
+    const pathBasedCategories = ['breaking', 'trending', 'new'];
+    const usePathEndpoint = params?.category && pathBasedCategories.includes(params.category.toLowerCase());
+    
+    if (usePathEndpoint) {
+      // Use path-based endpoint: /api/markets/breaking, /api/markets/trending, etc.
+      const queryParams = new URLSearchParams();
+      
+      if (params?.limit !== undefined) queryParams.append('limit', params.limit.toString());
+      if (params?.offset !== undefined) queryParams.append('offset', params.offset.toString());
+      if (params?.closed !== undefined) queryParams.append('closed', params.closed.toString());
+
+      const queryString = queryParams.toString();
+      const endpoint = `/api/markets/${params.category}${queryString ? `?${queryString}` : ''}`;
+
+      return this.fetchJson<MarketsResponse>(endpoint);
+    }
+    
+    // Regular categories use query parameter
+    const queryParams = new URLSearchParams();
+    
+    if (params?.limit !== undefined) queryParams.append('limit', params.limit.toString());
+    if (params?.offset !== undefined) queryParams.append('offset', params.offset.toString());
+    if (params?.category) queryParams.append('category', params.category);
+    if (params?.tag_id) queryParams.append('tag_id', params.tag_id);
+    if (params?.closed !== undefined) queryParams.append('closed', params.closed.toString());
+
+    const queryString = queryParams.toString();
+    const endpoint = `/api/markets${queryString ? `?${queryString}` : ''}`;
+
+    return this.fetchJson<MarketsResponse>(endpoint);
+  }
+
+  async getMarket(marketId: string): Promise<Market> {
+    return this.fetchJson<Market>(`/api/markets/${marketId}`);
+  }
+
+  async getCategories(): Promise<CategoriesResponse> {
+    return this.fetchJson<CategoriesResponse>('/api/categories');
+  }
+
+  // Models endpoints
+  async getModels(): Promise<ModelsResponse> {
+    return this.fetchJson<ModelsResponse>('/api/models');
+  }
+
+  // Debate endpoints
+  async startDebate(request: DebateStartRequest): Promise<DebateStartResponse> {
+    return this.fetchJson<DebateStartResponse>('/api/debate/start', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  async getDebate(debateId: string): Promise<DebateStatus> {
+    return this.fetchJson<DebateStatus>(`/api/debate/${debateId}`);
+  }
+
+  async pauseDebate(debateId: string): Promise<{ debate_id: string; status: string; current_round: number; paused_at: string }> {
+    return this.fetchJson(`/api/debate/${debateId}/pause`, {
+      method: 'POST',
+    });
+  }
+
+  async resumeDebate(debateId: string): Promise<{ debate_id: string; status: string; current_round: number; resumed_at: string }> {
+    return this.fetchJson(`/api/debate/${debateId}/resume`, {
+      method: 'POST',
+    });
+  }
+
+  async stopDebate(debateId: string): Promise<{ debate_id: string; status: string; completed_rounds: number; total_messages: number; stopped_at: string }> {
+    return this.fetchJson(`/api/debate/${debateId}/stop`, {
+      method: 'POST',
+    });
+  }
+
+  async getDebateResults(debateId: string): Promise<DebateResults> {
+    return this.fetchJson<DebateResults>(`/api/debate/${debateId}/results`);
+  }
+
+  async getDebateTranscript(debateId: string): Promise<{ debate_id: string; messages: DebateMessage[] }> {
+    return this.fetchJson(`/api/debate/${debateId}/transcript`);
+  }
+
+  async getDebates(params?: {
+    limit?: number;
+    offset?: number;
+    status?: 'all' | 'completed' | 'in_progress';
+    market_id?: string;
+  }): Promise<DebatesResponse> {
+    const queryParams = new URLSearchParams();
+    
+    if (params?.limit !== undefined) queryParams.append('limit', params.limit.toString());
+    if (params?.offset !== undefined) queryParams.append('offset', params.offset.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.market_id) queryParams.append('market_id', params.market_id);
+
+    const queryString = queryParams.toString();
+    const endpoint = `/api/debates${queryString ? `?${queryString}` : ''}`;
+
+    return this.fetchJson<DebatesResponse>(endpoint);
+  }
+
+  async getMarketDebates(marketId: string, params?: {
+    limit?: number;
+    offset?: number;
+    status?: 'all' | 'completed' | 'in_progress';
+  }): Promise<{ market: { id: string; question: string; current_odds: Record<string, number> }; debates: DebateListItem[] }> {
+    const queryParams = new URLSearchParams();
+    
+    if (params?.limit !== undefined) queryParams.append('limit', params.limit.toString());
+    if (params?.offset !== undefined) queryParams.append('offset', params.offset.toString());
+    if (params?.status) queryParams.append('status', params.status);
+
+    const queryString = queryParams.toString();
+    const endpoint = `/api/markets/${marketId}/debates${queryString ? `?${queryString}` : ''}`;
+
+    return this.fetchJson(endpoint);
+  }
+
+  // SSE Stream helper
+  createDebateStream(debateId: string, onEvent: (event: MessageEvent) => void): EventSource {
+    const url = `${this.baseUrl}/api/debate/${debateId}/stream`;
+    const eventSource = new EventSource(url);
+
+    eventSource.onmessage = onEvent;
+    eventSource.onerror = (error) => {
+      console.error('SSE stream error:', error);
+      eventSource.close();
+    };
+
+    return eventSource;
+  }
+
+  // Audio URL helper
+  getAudioUrl(messageId: string): string {
+    return `${this.baseUrl}/api/audio/${messageId}.mp3`;
+  }
+}
+
+export const apiClient = new ApiClient();
+
