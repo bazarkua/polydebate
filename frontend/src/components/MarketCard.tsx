@@ -50,13 +50,12 @@ export function MarketCard({
   period = "daily",
   isNew = false,
 }: MarketCardProps) {
-  const [hoveredIcon, setHoveredIcon] = useState<'save' | 'share' | null>(null);
   const [isCardHovered, setIsCardHovered] = useState(false);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  // Filter out outcomes with 0 shares and sort by price (highest to lowest)
+  // Filter out outcomes with 0 shares and sort by volume (shares) from highest to lowest
   const sortedOutcomes = useMemo(() => {
     return [...outcomes]
       .filter((outcome) => {
@@ -65,7 +64,11 @@ export function MarketCard({
         const sharesNum = parseFloat(outcome.shares);
         return !isNaN(sharesNum) && sharesNum > 0;
       })
-      .sort((a, b) => b.price - a.price);
+      .sort((a, b) => {
+        const sharesA = parseFloat(a.shares || "0");
+        const sharesB = parseFloat(b.shares || "0");
+        return sharesB - sharesA; // Sort by volume (shares) from highest to lowest
+      });
   }, [outcomes]);
 
   const handleSave = (e: React.MouseEvent) => {
@@ -828,25 +831,22 @@ export function MarketCard({
           <div 
             className="flex items-center gap-2"
             onMouseEnter={(e) => e.stopPropagation()}
-            onMouseLeave={(e) => {
-              e.stopPropagation();
-              setHoveredIcon(null);
-            }}
+            onMouseLeave={(e) => e.stopPropagation()}
           >
             <button
               onClick={handleSave}
-              className="p-1.5 rounded transition-all duration-150"
+              className="p-1.5 rounded transition-colors duration-100"
               style={{ 
                 color: "var(--foreground-secondary)",
-                backgroundColor: hoveredIcon === 'save' ? "var(--color-soft-gray)" : "transparent",
+                backgroundColor: "transparent",
               }}
               onMouseEnter={(e) => {
                 e.stopPropagation();
-                setHoveredIcon('save');
+                e.currentTarget.style.backgroundColor = "var(--color-soft-gray)";
               }}
               onMouseLeave={(e) => {
                 e.stopPropagation();
-                setHoveredIcon(null);
+                e.currentTarget.style.backgroundColor = "transparent";
               }}
               aria-label="Save market"
             >
@@ -867,18 +867,18 @@ export function MarketCard({
             </button>
             <button
               onClick={handleShare}
-              className="p-1.5 rounded transition-all duration-150"
+              className="p-1.5 rounded transition-colors duration-100"
               style={{ 
                 color: "var(--foreground-secondary)",
-                backgroundColor: hoveredIcon === 'share' ? "var(--color-soft-gray)" : "transparent",
+                backgroundColor: "transparent",
               }}
               onMouseEnter={(e) => {
                 e.stopPropagation();
-                setHoveredIcon('share');
+                e.currentTarget.style.backgroundColor = "var(--color-soft-gray)";
               }}
               onMouseLeave={(e) => {
                 e.stopPropagation();
-                setHoveredIcon(null);
+                e.currentTarget.style.backgroundColor = "transparent";
               }}
               aria-label="Share market"
             >
