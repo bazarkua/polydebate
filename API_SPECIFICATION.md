@@ -146,22 +146,40 @@ Get markets by category slug (Polymarket-style URLs).
 - Crypto markets: `GET /api/markets/crypto`
 - Breaking news: `GET /api/markets/breaking`
 - Trending markets: `GET /api/markets/trending?limit=10`
+- New markets: `GET /api/markets/new`
+- Economy markets: `GET /api/markets/economy`
+- Culture markets: `GET /api/markets/culture` or `GET /api/markets/pop-culture`
 
 **Note:** This endpoint provides a cleaner URL structure similar to Polymarket. If the path is numeric, it's treated as a market ID (see next endpoint).
 
 **Supported category slugs:**
-- `politics` - Political markets
-- `sports` - Sports markets
-- `crypto` - Cryptocurrency markets
-- `business` - Business & finance markets
-- `science` - Science & technology markets
-- `breaking` - Breaking news markets (shows highest-volume markets sorted by trading volume)
-- `trending` - Trending markets (shows highest-volume markets sorted by trading volume)
-- `ai` - AI & machine learning markets
-- `world` - World events & geopolitics
+- `politics` - Political markets (sorted by 24hr volume)
+- `sports` - Sports markets (sorted by 24hr volume)
+- `crypto` - Cryptocurrency markets (sorted by 24hr volume)
+- `business` - Business & finance markets (sorted by 24hr volume)
+- `science` - Science & technology markets (sorted by 24hr volume)
+- `technology` - Technology markets (sorted by 24hr volume)
+- `finance` - Finance markets (sorted by 24hr volume)
+- `ai` - AI & machine learning markets (sorted by 24hr volume)
+- `world` - World events (sorted by 24hr volume)
+- `geopolitics` - Geopolitics markets (sorted by 24hr volume)
+- `economy` - Economy markets (sorted by 24hr volume)
+- `earnings` - Earnings markets (sorted by 24hr volume)
+- `culture` or `pop-culture` - Pop culture markets (sorted by 24hr volume)
+- `global-elections` or `elections` - Global elections markets (sorted by 24hr volume)
+- `breaking` - Breaking news markets (sorted by largest price changes in 24hr)
+- `trending` - Trending markets (sorted by 24hr volume)
+- `new` - Newest markets (sorted by creation date, newest first)
 
 **Special Categories:**
-- **`breaking` and `trending`**: Since Polymarket doesn't have dedicated "breaking" or "trending" tags, these endpoints return the top markets sorted by trading volume (descending). This provides a dynamic list of the most active/popular markets, which effectively represents "breaking" or "trending" content.
+- **`breaking`**: Uses Polymarket's biggest-movers API to show markets with the largest price changes in the last 24 hours, representing breaking news and rapidly developing events.
+- **`trending`**: Shows markets sorted by 24-hour trading volume (descending), representing the most active markets.
+- **`new`**: Shows markets sorted by creation date (newest first), displaying recently created prediction markets.
+
+**Default Behavior:**
+- All regular categories (politics, sports, crypto, etc.) are sorted by 24-hour trading volume in descending order
+- All categories show active markets with all frequencies (both open and closed markets)
+- Results are paginated with a maximum of 100 items per request
 
 ---
 
