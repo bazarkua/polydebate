@@ -13,6 +13,7 @@ interface BreakingMarket {
   change: number; // positive or negative percentage change
   volume: string;
   category: string;
+  sparkline?: number[]; // Historical price data for sparkline (24 data points, 0-1 range)
 }
 
 interface BreakingNewsProps {
@@ -250,23 +251,42 @@ export function BreakingNews({ markets, activeCategory, onCategoryChange }: Brea
                     <div 
                       className="w-16 h-8 flex items-end justify-center gap-px"
                     >
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        // Generate a more realistic sparkline pattern
-                        const baseHeight = 30 + (i * 3);
-                        const variation = Math.sin(i * 0.5) * 20;
-                        const height = Math.max(10, Math.min(100, baseHeight + variation + (isPositive ? 10 : -10)));
-                        return (
-                          <div
-                            key={i}
-                            className="flex-1 rounded-t"
-                            style={{
-                              height: `${height}%`,
-                              backgroundColor: isPositive ? "var(--color-green)" : "var(--color-red)",
-                              minHeight: "2px",
-                            }}
-                          />
-                        );
-                      })}
+                      {market.sparkline && market.sparkline.length > 0 ? (
+                        // Use real sparkline data from API
+                        market.sparkline.slice(-12).map((price, i) => {
+                          // Convert price (0-1 range) to height percentage (10-100%)
+                          const height = Math.max(10, Math.min(100, price * 100));
+                          return (
+                            <div
+                              key={i}
+                              className="flex-1 rounded-t"
+                              style={{
+                                height: `${height}%`,
+                                backgroundColor: isPositive ? "var(--color-green)" : "var(--color-red)",
+                                minHeight: "2px",
+                              }}
+                            />
+                          );
+                        })
+                      ) : (
+                        // Fallback: generate sparkline if no data
+                        Array.from({ length: 12 }).map((_, i) => {
+                          const baseHeight = 30 + (i * 3);
+                          const variation = Math.sin(i * 0.5) * 20;
+                          const height = Math.max(10, Math.min(100, baseHeight + variation + (isPositive ? 10 : -10)));
+                          return (
+                            <div
+                              key={i}
+                              className="flex-1 rounded-t"
+                              style={{
+                                height: `${height}%`,
+                                backgroundColor: isPositive ? "var(--color-green)" : "var(--color-red)",
+                                minHeight: "2px",
+                              }}
+                            />
+                          );
+                        })
+                      )}
                     </div>
 
                     {/* Arrow */}

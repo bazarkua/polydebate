@@ -27,6 +27,7 @@ interface TransformedMarket {
   period: "daily" | "monthly";
   isLive: boolean;
   price_change_24h?: number;
+  sparkline?: number[];
 }
 
 interface MarketsGridProps {

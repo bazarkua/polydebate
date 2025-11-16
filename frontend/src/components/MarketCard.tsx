@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import BlurText from "@/components/BlurText";
 import { useState, useMemo, useRef, useEffect } from "react";
+import Link from "next/link";
 
 interface Outcome {
   name: string;
@@ -905,12 +906,11 @@ export function MarketCard({
     </Card>
     
     {/* Start AI Debate Button - slides out from bottom on hover */}
-    <button
+    <Link
+      href={`/market/${id}/debate`}
       data-role="start-ai-debate"
       onClick={(e) => {
         e.stopPropagation();
-        // TODO: Navigate to debate page
-        window.location.href = `/market/${id}/debate`;
       }}
       onMouseEnter={(e) => {
         e.stopPropagation();
@@ -964,7 +964,7 @@ export function MarketCard({
           hoverTimeoutRef.current = null;
         }, 30);
       }}
-      className="absolute left-0 right-0 transition-all duration-300 ease-out"
+      className="absolute left-0 right-0 transition-all duration-300 ease-out block text-center no-underline"
       style={{
         bottom: isCardHovered ? "-10px" : "5px",
         transform: isCardHovered ? "translateY(0)" : "translateY(100%)",
@@ -982,10 +982,11 @@ export function MarketCard({
         pointerEvents: isCardHovered ? "auto" : "none",
         cursor: "pointer",
         zIndex: 20,
+        textDecoration: "none",
       }}
     >
       Start AI Debate
-    </button>
+    </Link>
     </div>
   );
 }

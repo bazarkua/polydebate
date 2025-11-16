@@ -58,6 +58,7 @@ const transformMarket = (market: Market) => {
     period,
     isLive,
     price_change_24h: market.price_change_24h,
+    sparkline: market.sparkline,
   };
 };
 

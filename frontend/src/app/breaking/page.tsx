@@ -25,21 +25,25 @@ export default function BreakingPage() {
   });
 
   // Transform markets for Breaking News component
+  // Sort by absolute price change (highest first) to rank by biggest movers
   const breakingMarkets = useMemo(() => {
-    return allFilteredMarkets.slice(0, 15).map((market, index) => {
+    // Sort by absolute price change (biggest movers first)
+    const sorted = [...allFilteredMarkets].sort((a, b) => {
+      const changeA = Math.abs(a.price_change_24h || 0);
+      const changeB = Math.abs(b.price_change_24h || 0);
+      return changeB - changeA; // Descending order (biggest change first)
+    });
+
+    return sorted.slice(0, 15).map((market, index) => {
       // Calculate percentage (use first outcome price or average)
       const percentage = market.outcomes.length > 0
         ? Math.round(market.outcomes[0].price * 100)
         : 50;
       
-      // Use real price change from API if available, otherwise simulate
-      let change = 0;
-      if (market.price_change_24h !== undefined && market.price_change_24h !== null) {
-        change = market.price_change_24h;
-      } else {
-        // Fallback: simulate change if API doesn't provide it
-        change = (Math.random() * 60 - 30);
-      }
+      // Use real price change from API
+      const change = market.price_change_24h !== undefined && market.price_change_24h !== null
+        ? market.price_change_24h
+        : 0;
       
       return {
         id: market.id,
@@ -50,6 +54,7 @@ export default function BreakingPage() {
         change: Math.round(change * 10) / 10,
         volume: market.volume,
         category: market.category,
+        sparkline: market.sparkline, // Pass sparkline data
       };
     });
   }, [allFilteredMarkets]);
