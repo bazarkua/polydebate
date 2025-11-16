@@ -54,6 +54,7 @@ export function MarketCard({
   const [isCardHovered, setIsCardHovered] = useState(false);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
   // Filter out outcomes with 0 shares and sort by price (highest to lowest)
   const sortedOutcomes = useMemo(() => {
@@ -93,6 +94,8 @@ export function MarketCard({
       style={{ 
         overflow: "visible",
         zIndex: 1,
+        paddingBottom: "5px",
+        marginBottom: "0",
       }}
       onMouseEnter={(e) => {
         // Clear any pending timeout immediately
@@ -132,6 +135,7 @@ export function MarketCard({
       }}
     >
       <Card
+        ref={cardRef}
         className={cn(
           "cursor-pointer transition-all duration-150",
           "border rounded-lg flex flex-col",
@@ -154,6 +158,14 @@ export function MarketCard({
           e.currentTarget.style.transform = "translateY(-2px)";
         }}
         onMouseLeave={(e) => {
+          const wrapperElement = wrapperRef.current;
+          const rt = e.relatedTarget as Node | null;
+          
+          // If we're moving to the button, keep the hover styles
+          if (wrapperElement && rt && wrapperElement.contains(rt)) {
+            return;
+          }
+          
           e.currentTarget.style.backgroundColor = "var(--card-bg)";
           e.currentTarget.style.borderColor = "var(--card-border)";
           e.currentTarget.style.boxShadow = "var(--shadow-sm)";
@@ -907,6 +919,14 @@ export function MarketCard({
         }
         setIsCardHovered(true);
         e.currentTarget.style.backgroundColor = "var(--nav-bg)";
+        
+        // Apply card hover styles when button is hovered
+        if (cardRef.current) {
+          cardRef.current.style.backgroundColor = "var(--card-bg-hover)";
+          cardRef.current.style.borderColor = "rgba(0, 0, 0, 0.15)";
+          cardRef.current.style.boxShadow = "var(--shadow-md)";
+          cardRef.current.style.transform = "translateY(-2px)";
+        }
       }}
       onMouseLeave={(e) => {
         e.stopPropagation();
@@ -925,28 +945,39 @@ export function MarketCard({
           return;
         }
 
-        // Otherwise we left both button and card → hide
+        // Otherwise we left both button and card → hide and remove card hover styles
         hoverTimeoutRef.current = setTimeout(() => {
           setIsCardHovered(false);
           if (wrapperElement) {
             wrapperElement.style.zIndex = "1";
+          }
+          // Remove card hover styles
+          if (cardRef.current) {
+            cardRef.current.style.backgroundColor = "var(--card-bg)";
+            cardRef.current.style.borderColor = "var(--card-border)";
+            cardRef.current.style.boxShadow = "var(--shadow-sm)";
+            cardRef.current.style.transform = "translateY(0)";
           }
           hoverTimeoutRef.current = null;
         }, 30);
       }}
       className="absolute left-0 right-0 transition-all duration-300 ease-out"
       style={{
-        bottom: isCardHovered ? "8px" : "-48px",
+        bottom: isCardHovered ? "-10px" : "5px",
+        transform: isCardHovered ? "translateY(0)" : "translateY(100%)",
         opacity: isCardHovered ? 1 : 0,
         backgroundColor: "var(--color-charcoal)",
         color: "var(--color-white)",
         padding: "10px 6px",
-        borderRadius: "1.5rem",
+        borderRadius: "0.5rem",
+        borderTopLeftRadius: "0",
+        borderTopRightRadius: "0",
         fontSize: "var(--text-base)",
         fontWeight: 500,
         lineHeight: "var(--leading-base)",
         boxShadow: "var(--shadow-md)",
         pointerEvents: isCardHovered ? "auto" : "none",
+        cursor: "pointer",
         zIndex: 20,
       }}
     >

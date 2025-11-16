@@ -478,7 +478,7 @@ export default function Home() {
         {/* Markets Grid */}
         {!isInitialLoading && !error && displayedMarkets.length > 0 ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch" style={{ overflow: "visible" }}>
               {displayedMarkets.map((market) => (
                 <MarketCard 
                   key={market.id} 
