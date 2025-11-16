@@ -84,6 +84,33 @@ def register_routes(app):
             }
         }), 200
 
+    @app.route('/api/audio/<filename>', methods=['GET'])
+    def serve_audio(filename):
+        """Serve audio files"""
+        from flask import send_from_directory
+        import os
+
+        # Security: validate filename
+        if not filename.endswith('.mp3') or '..' in filename or '/' in filename:
+            return jsonify({
+                'error': {
+                    'code': 'invalid_filename',
+                    'message': 'Invalid audio filename'
+                }
+            }), 400
+
+        audio_path = os.path.join(config.AUDIO_DIR, filename)
+
+        if not os.path.exists(audio_path):
+            return jsonify({
+                'error': {
+                    'code': 'audio_not_found',
+                    'message': f'Audio file {filename} not found'
+                }
+            }), 404
+
+        return send_from_directory(config.AUDIO_DIR, filename, mimetype='audio/mpeg')
+
 
 def register_error_handlers(app):
     """Register error handlers"""
