@@ -23,7 +23,7 @@ class VerificationCode(Base):
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
     email = Column(String(255), nullable=False, index=True)  # For signup codes before user exists
     name = Column(String(255), nullable=True)  # Store name for signup
-    code = Column(String(8), nullable=False)
+    code_hash = Column(String(60), nullable=False)  # bcrypt hash of the verification code
     code_type = Column(SQLEnum(CodeType), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     used_at = Column(DateTime, nullable=True)
