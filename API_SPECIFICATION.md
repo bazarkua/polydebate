@@ -70,8 +70,11 @@ Get a list of active Polymarket markets.
 |-----------|------|----------|---------|-------------|
 | `limit` | integer | No | 100 | Number of markets (max 100) |
 | `offset` | integer | No | 0 | Pagination offset |
-| `tag_id` | string | No | null | Category ID for filtering |
+| `category` | string | No | null | Category slug for filtering (e.g., "politics", "sports", "crypto") |
+| `tag_id` | string | No | null | Specific tag ID for filtering (alternative to category) |
 | `closed` | boolean | No | false | Include closed markets |
+
+**Note:** Use `category` parameter for filtering by slug (like Polymarket URLs: `/politics`, `/sports`). Use `tag_id` for specific tag filtering.
 
 **Response:** `200 OK`
 ```json
@@ -110,11 +113,59 @@ Get a list of active Polymarket markets.
 
 **Cache:**
 - Duration: 5 minutes
-- Cache key: `markets:{limit}:{offset}:{tag_id}:{closed}`
+- Cache key: `markets:{limit}:{offset}:{category}:{tag_id}:{closed}`
+
+**Examples:**
+- All markets: `GET /api/markets?limit=100`
+- Politics category: `GET /api/markets?category=politics`
+- Sports category: `GET /api/markets?category=sports`
+- Specific tag: `GET /api/markets?tag_id=crypto-100`
+- Closed markets in politics: `GET /api/markets?category=politics&closed=true`
 
 ---
 
-### 2. GET `/api/markets/<market_id>`
+### 2. GET `/api/markets/<category_slug>`
+
+Get markets by category slug (Polymarket-style URLs).
+
+**Path Parameters:**
+- `category_slug` (string): Category slug (e.g., "politics", "sports", "crypto")
+
+**Query Parameters:**
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `limit` | integer | No | 100 | Number of markets (max 100) |
+| `offset` | integer | No | 0 | Pagination offset |
+| `closed` | boolean | No | false | Include closed markets |
+
+**Response:** Same as `GET /api/markets` (returns markets list)
+
+**Examples:**
+- Politics markets: `GET /api/markets/politics`
+- Sports markets: `GET /api/markets/sports?limit=20`
+- Crypto markets: `GET /api/markets/crypto`
+- Breaking news: `GET /api/markets/breaking`
+- Trending markets: `GET /api/markets/trending?limit=10`
+
+**Note:** This endpoint provides a cleaner URL structure similar to Polymarket. If the path is numeric, it's treated as a market ID (see next endpoint).
+
+**Supported category slugs:**
+- `politics` - Political markets
+- `sports` - Sports markets
+- `crypto` - Cryptocurrency markets
+- `business` - Business & finance markets
+- `science` - Science & technology markets
+- `breaking` - Breaking news markets (shows highest-volume markets sorted by trading volume)
+- `trending` - Trending markets (shows highest-volume markets sorted by trading volume)
+- `ai` - AI & machine learning markets
+- `world` - World events & geopolitics
+
+**Special Categories:**
+- **`breaking` and `trending`**: Since Polymarket doesn't have dedicated "breaking" or "trending" tags, these endpoints return the top markets sorted by trading volume (descending). This provides a dynamic list of the most active/popular markets, which effectively represents "breaking" or "trending" content.
+
+---
+
+### 3. GET `/api/markets/<market_id>`
 
 Get detailed information about a specific market.
 

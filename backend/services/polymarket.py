@@ -18,6 +18,7 @@ class PolymarketService:
         self,
         limit: int = 100,
         offset: int = 0,
+        category: Optional[str] = None,
         tag_id: Optional[str] = None,
         closed: bool = False
     ) -> Dict:
@@ -27,26 +28,32 @@ class PolymarketService:
         Args:
             limit: Number of markets to fetch (max 100)
             offset: Pagination offset
-            tag_id: Optional category tag filter
+            category: Optional category slug filter (e.g., "politics", "sports")
+            tag_id: Optional specific tag ID filter
             closed: Include closed markets
 
         Returns:
             Dict with markets list and pagination info
         """
         # Check cache first
-        cache_key = f"markets:{limit}:{offset}:{tag_id}:{closed}"
+        cache_key = f"markets:{limit}:{offset}:{category}:{tag_id}:{closed}"
         cached_result = cache.get(cache_key)
         if cached_result:
             return cached_result
 
+        # If category filter is provided, fetch more markets since we filter client-side
+        # (Polymarket API doesn't support category filtering directly)
+        fetch_limit = 500 if category else min(limit, 100)
+
         params = {
-            'limit': min(limit, 100),
+            'limit': fetch_limit,
             'offset': offset,
             'closed': 'true' if closed else 'false',
             'order': 'id',
             'ascending': 'false'
         }
 
+        # If specific tag_id is provided, use Polymarket's native filtering
         if tag_id:
             params['tag_id'] = tag_id
 
@@ -61,6 +68,33 @@ class PolymarketService:
 
             # Transform Polymarket response to our format
             markets = self._transform_markets(data)
+
+            # Filter by category slug if provided (client-side filtering)
+            if category:
+                category_lower = category.lower()
+
+                # Special case: "breaking" and "trending" categories show high-volume markets
+                # since Polymarket doesn't have dedicated tags for these
+                if category_lower in ['breaking', 'trending']:
+                    # Sort by volume (descending) to show most active markets
+                    markets.sort(key=lambda m: m.get('volume_raw', 0), reverse=True)
+                    # Take the top N most active markets
+                    markets = markets[:limit]
+                else:
+                    # Regular category filtering
+                    markets = [
+                        m for m in markets
+                        if m.get('category', '').lower() == category_lower
+                    ]
+                    # Apply limit after filtering
+                    markets = markets[:limit]
+            else:
+                # No category filter - just apply limit
+                markets = markets[:limit]
+
+            # Remove volume_raw from all markets (internal field only)
+            for m in markets:
+                m.pop('volume_raw', None)
 
             result = {
                 'markets': markets,
@@ -158,6 +192,7 @@ class PolymarketService:
                 continue
 
             # For simplicity, we'll use the event itself as the market
+            raw_volume = float(event.get('volume', 0))
             market = {
                 'id': event.get('id'),
                 'question': event.get('title'),
@@ -165,7 +200,8 @@ class PolymarketService:
                 'category': self._get_category_name(event.get('tags', [])),
                 'tag_id': event.get('tags', [None])[0] if event.get('tags') else None,
                 'outcomes': self._get_outcomes(markets_data),
-                'volume': self._format_volume(event.get('volume', 0)),
+                'volume': self._format_volume(raw_volume),
+                'volume_raw': raw_volume,  # Keep raw volume for sorting
                 'end_date': event.get('endDate'),
                 'created_date': event.get('createdAt'),
                 'image_url': event.get('image', '')
@@ -234,7 +270,16 @@ class PolymarketService:
 
     def _get_category_name(self, tags: List[str]) -> str:
         """Extract category name from tags"""
-        # Map tag IDs to category names
+        if not tags:
+            return 'Other'
+
+        # Priority categories (checked first)
+        priority_map = {
+            'breaking': 'Breaking',
+            'trending': 'Trending'
+        }
+
+        # Main category map
         category_map = {
             'crypto': 'Crypto',
             'politics': 'Politics',
@@ -242,24 +287,47 @@ class PolymarketService:
             'science': 'Science',
             'pop-culture': 'Pop Culture',
             'business': 'Business',
-            'technology': 'Technology'
+            'technology': 'Technology',
+            'finance': 'Finance',
+            'ai': 'AI',
+            'world': 'World',
+            'geopolitics': 'Geopolitics'
         }
 
-        if not tags:
-            return 'Other'
+        # First, check for priority categories (Breaking News)
+        for tag in tags:
+            if isinstance(tag, dict):
+                tag_label = tag.get('label', '').lower()
+                tag_slug = tag.get('slug', '').lower()
+            else:
+                tag_label = str(tag).lower()
+                tag_slug = tag_label
 
-        # Tags can be strings or dicts - handle both
+            # Check priority categories first
+            for key, value in priority_map.items():
+                if key == tag_label or key == tag_slug or key in tag_label or key in tag_slug:
+                    return value
+
+        # Then search through ALL tags for main categories
+        for tag in tags:
+            if isinstance(tag, dict):
+                tag_label = tag.get('label', '').lower()
+                tag_slug = tag.get('slug', '').lower()
+            else:
+                tag_label = str(tag).lower()
+                tag_slug = tag_label
+
+            # Check main categories
+            for key, value in category_map.items():
+                if key == tag_label or key == tag_slug or key in tag_label or key in tag_slug:
+                    return value
+
+        # If no known category found, return the first tag's label
         first_tag = tags[0]
         if isinstance(first_tag, dict):
-            first_tag = first_tag.get('label', first_tag.get('id', '')).lower()
+            return first_tag.get('label', 'Other').title()
         else:
-            first_tag = str(first_tag).lower()
-
-        for key, value in category_map.items():
-            if key in first_tag:
-                return value
-
-        return first_tag.title() if first_tag else 'Other'
+            return str(first_tag).title() if first_tag else 'Other'
 
     def _transform_categories(self, tags: List[Dict]) -> List[Dict]:
         """Transform Polymarket tags to categories"""

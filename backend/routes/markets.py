@@ -14,6 +14,7 @@ def get_markets():
         # Parse query parameters
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
+        category = request.args.get('category', None)  # New: category slug filter
         tag_id = request.args.get('tag_id', None)
         closed = request.args.get('closed', 'false').lower() == 'true'
 
@@ -25,6 +26,7 @@ def get_markets():
         result = polymarket_service.get_markets(
             limit=limit,
             offset=offset,
+            category=category,
             tag_id=tag_id,
             closed=closed
         )
@@ -40,11 +42,34 @@ def get_markets():
         }), 503
 
 
-@markets_bp.route('/markets/<market_id>', methods=['GET'])
-def get_market(market_id):
-    """GET /api/markets/<market_id> - Fetch market details"""
+@markets_bp.route('/markets/<path>', methods=['GET'])
+def get_market_or_category(path):
+    """GET /api/markets/<path> - Fetch market details or category markets"""
     try:
-        market = polymarket_service.get_market(market_id)
+        # Check if path is a category slug (non-numeric)
+        if not path.isdigit():
+            # Treat as category slug
+            limit = request.args.get('limit', 100, type=int)
+            offset = request.args.get('offset', 0, type=int)
+            closed = request.args.get('closed', 'false').lower() == 'true'
+
+            # Validate
+            limit = min(limit, 100)
+            offset = max(offset, 0)
+
+            # Fetch markets by category
+            result = polymarket_service.get_markets(
+                limit=limit,
+                offset=offset,
+                category=path,
+                tag_id=None,
+                closed=closed
+            )
+
+            return jsonify(result), 200
+
+        # Otherwise, treat as market ID
+        market = polymarket_service.get_market(path)
         return jsonify(market), 200
 
     except Exception as e:
