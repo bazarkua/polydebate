@@ -41,55 +41,80 @@ class PolymarketService:
         if cached_result:
             return cached_result
 
-        # If category filter is provided, fetch more markets since we filter client-side
-        # (Polymarket API doesn't support category filtering directly)
-        fetch_limit = 500 if category else min(limit, 100)
+        # Check if this is trending/breaking (special categories)
+        is_trending_or_breaking = category and category.lower() in ['breaking', 'trending']
 
+        # Use pagination endpoint for better filtering and sorting
         params = {
-            'limit': fetch_limit,
+            'limit': min(limit, 100),
             'offset': offset,
-            'closed': 'true' if closed else 'false',
-            'order': 'volume',  # Sort by volume to match Polymarket's default ordering
+            'archived': 'false',
+            'order': 'volume24hr',  # Sort by 24h volume to match Polymarket's default ordering
             'ascending': 'false'
         }
 
-        # If specific tag_id is provided, use Polymarket's native filtering
+        # For trending/breaking, show ALL markets (active and closed) to get full picture
+        if is_trending_or_breaking:
+            # Don't set active or closed filters - show everything
+            pass
+        else:
+            # For regular categories, only show active markets by default
+            params['active'] = 'true'
+            params['closed'] = 'true' if closed else 'false'
+
+        # Use tag_slug for category filtering (Polymarket's native approach)
+        if category and not is_trending_or_breaking:
+            # Map our category names to Polymarket tag slugs
+            category_slug_map = {
+                'politics': 'politics',
+                'sports': 'sports',
+                'crypto': 'crypto',
+                'business': 'business',
+                'science': 'science',
+                'technology': 'technology',
+                'finance': 'finance',
+                'ai': 'ai',
+                'world': 'world',
+                'geopolitics': 'geopolitics'
+            }
+
+            tag_slug = category_slug_map.get(category.lower())
+            if tag_slug:
+                params['tag_slug'] = tag_slug
+
+        # If specific tag_id is provided, use it instead
         if tag_id:
             params['tag_id'] = tag_id
 
         try:
-            response = self.session.get(
-                f'{self.base_url}/events',
-                params=params,
-                timeout=10
-            )
-            response.raise_for_status()
-            data = response.json()
+            # Use different endpoint for trending/breaking vs regular categories
+            if is_trending_or_breaking:
+                # For trending/breaking, use simple /events endpoint (includes all markets)
+                response = self.session.get(
+                    f'{self.base_url}/events',
+                    params=params,
+                    timeout=10
+                )
+                response.raise_for_status()
+                data = response.json()  # Returns array directly
+            else:
+                # For regular categories, use /events/pagination for better filtering
+                response = self.session.get(
+                    f'{self.base_url}/events/pagination',
+                    params=params,
+                    timeout=10
+                )
+                response.raise_for_status()
+                response_data = response.json()
+                data = response_data.get('data', [])  # Extract data array
 
             # Transform Polymarket response to our format
             markets = self._transform_markets(data)
 
-            # Filter by category slug if provided (client-side filtering)
-            if category:
-                category_lower = category.lower()
-
-                # Special case: "breaking" and "trending" categories show high-volume markets
-                # since Polymarket doesn't have dedicated tags for these
-                if category_lower in ['breaking', 'trending']:
-                    # Sort by volume (descending) to show most active markets
-                    markets.sort(key=lambda m: m.get('volume_raw', 0), reverse=True)
-                    # Take the top N most active markets
-                    markets = markets[:limit]
-                else:
-                    # Regular category filtering
-                    markets = [
-                        m for m in markets
-                        if m.get('category', '').lower() == category_lower
-                    ]
-                    # Apply limit after filtering
-                    markets = markets[:limit]
-            else:
-                # No category filter - just apply limit
+            # Special case: "breaking" and "trending" show all high-volume markets (no tag filter)
+            # These categories already come sorted by volume24hr from the API
+            if category and category.lower() in ['breaking', 'trending']:
+                # No filtering needed, API already sorted by volume
                 markets = markets[:limit]
 
             # Remove volume_raw from all markets (internal field only)
