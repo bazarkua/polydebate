@@ -36,14 +36,7 @@ class SignupRequestSchema(BaseModel):
 
 class SignupVerifySchema(BaseModel):
     email: EmailStr
-    name: str
     code: str
-
-    @validator('name')
-    def name_not_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError('Name cannot be empty')
-        return v.strip()
 
     @validator('code')
     def code_not_empty(cls, v):
@@ -174,7 +167,6 @@ def signup_verify_code():
             }), 400
 
         email = validated_data['email']
-        name = validated_data['name']
         code = validated_data['code']
 
         # Check verification attempt limit
@@ -188,9 +180,9 @@ def signup_verify_code():
                 }
             }), 429
 
-        # Verify code
+        # Verify code (name will be taken from stored verification code)
         success, message, user_data, error_code = auth_service.verify_signup_code(
-            email, name, code, ip
+            email, code, ip
         )
 
         # Record attempt

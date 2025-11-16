@@ -107,13 +107,12 @@ class AuthService:
         finally:
             db.close()
 
-    def verify_signup_code(self, email: str, name: str, code: str, ip: str) -> Tuple[bool, str, Optional[dict], Optional[str]]:
+    def verify_signup_code(self, email: str, code: str, ip: str) -> Tuple[bool, str, Optional[dict], Optional[str]]:
         """
         Verify signup code and create user account
 
         Args:
             email: User email
-            name: User name
             code: Verification code
             ip: IP address
 
@@ -154,7 +153,7 @@ class AuthService:
             # Create user account using name from verification code
             user = User(
                 email=email,
-                name=verification_code.name or name,  # Use stored name, fallback to provided
+                name=verification_code.name,  # Use name from request-code step
                 created_at=datetime.utcnow(),
                 last_login=datetime.utcnow(),
                 is_active=True
