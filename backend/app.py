@@ -48,6 +48,12 @@ def create_app():
 def register_routes(app):
     """Register all application routes"""
 
+    # Import blueprints
+    from routes.markets import markets_bp
+
+    # Register blueprints
+    app.register_blueprint(markets_bp, url_prefix='/api')
+
     @app.route('/api/health', methods=['GET'])
     def health():
         """Health check endpoint"""
@@ -68,6 +74,7 @@ def register_routes(app):
             'endpoints': {
                 'health': '/api/health',
                 'markets': '/api/markets',
+                'categories': '/api/categories',
                 'models': '/api/models',
                 'debates': '/api/debates'
             }
